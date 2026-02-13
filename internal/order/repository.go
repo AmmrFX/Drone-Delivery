@@ -17,6 +17,7 @@ type Repository interface {
 	ListBySubmitter(ctx context.Context, ext sqlx.ExtContext, submittedBy string) ([]*Order, error)
 	ListAll(ctx context.Context, ext sqlx.ExtContext, status *Status, page, limit int) ([]*Order, int, error)
 	GetByDroneID(ctx context.Context, ext sqlx.ExtContext, droneID string) (*Order, error)
+	Cancel(ctx context.Context, ext sqlx.ExtContext, orderID uuid.UUID, submittedBy string) error
 }
 
 type orderRepository struct{}
@@ -88,6 +89,23 @@ func (r *orderRepository) ListAll(ctx context.Context, ext sqlx.ExtContext, stat
 	}
 
 	return orders, total, nil
+}
+
+func (r *orderRepository) Cancel(ctx context.Context, ext sqlx.ExtContext, orderID uuid.UUID, submittedBy string) error {
+	const query = `UPDATE orders SET status = 'CANCELLED', submitted_by = $2, updated_at = NOW()
+		WHERE id = $1 AND status NOT IN ('COMPLETED', 'CANCELLED')`
+	res, err := ext.ExecContext(ctx, query, orderID, submittedBy)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("order %s not found or already completed/cancelled", orderID)
+	}
+	return nil
 }
 
 func (r *orderRepository) GetByDroneID(ctx context.Context, ext sqlx.ExtContext, droneID string) (*Order, error) {

@@ -91,7 +91,7 @@ func wireApp(cfg *config.Config) (*AppContext, error) {
 	// ── Repositories ──
 	orderRepo := order.NewOrderRepository()
 	droneRepo := drone.NewDroneRepository()
-	jobRepo := job.NewJobRepository()
+	jobRepo := job.NewJobRepository(db, orderRepo, droneRepo)
 
 	// ── Services ──
 	orderService := order.NewOrderService(orderRepo, db, order.ZoneConfig{
@@ -110,7 +110,7 @@ func wireApp(cfg *config.Config) (*AppContext, error) {
 	authHandler := auth.NewHandler(authService)
 	orderHandler := order.NewHandler(orderService, jobService)
 	droneHandler := drone.NewHandler(droneService, &orderQueryAdapter{svc: orderService}, jobService, db)
-	jobHandler := job.NewHandler(jobService, orderService, droneService, db)
+	jobHandler := job.NewHandler(jobService)
 	adminHandler := admin.NewHandler(adminService, orderService, droneService)
 
 	return &AppContext{

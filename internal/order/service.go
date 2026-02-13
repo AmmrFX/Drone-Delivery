@@ -11,13 +11,8 @@ import (
 )
 
 type Service interface {
-	PlaceOrder(ctx context.Context, submittedBy string, origin, destination common.Location) (*Order, error)
-	WithdrawOrder(ctx context.Context, orderID uuid.UUID, submittedBy string) error
 	GetOrderDetails(ctx context.Context, orderID uuid.UUID, submittedBy string) (*Order, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*Order, error)
 	GetByDroneID(ctx context.Context, droneID string) (*Order, error)
-	SaveWithTx(ctx context.Context, tx sqlx.ExtContext, o *Order) error
-	GetByIDWithTx(ctx context.Context, tx sqlx.ExtContext, id uuid.UUID) (*Order, error)
 	AwaitHandoffWithTx(ctx context.Context, tx sqlx.ExtContext, orderID uuid.UUID) error
 	ListAll(ctx context.Context, status *Status, page, limit int) ([]*Order, int, error)
 	AdminUpdateOrder(ctx context.Context, orderID uuid.UUID, origin, destination *common.Location) (*Order, error)
@@ -52,37 +47,6 @@ func (s *service) validateLocation(loc common.Location, label string) error {
 	return nil
 }
 
-// -------------------------------------------------------------------------------------------------
-func (s *service) PlaceOrder(ctx context.Context, submittedBy string, origin, destination common.Location) (*Order, error) {
-	if err := s.validateLocation(origin, "origin"); err != nil {
-		return nil, err
-	}
-	if err := s.validateLocation(destination, "destination"); err != nil {
-		return nil, err
-	}
-
-	o := NewOrder(submittedBy, origin, destination)
-	if err := s.repo.Create(ctx, s.db, o); err != nil {
-		return nil, domainerrors.NewInternal("failed to create order", err)
-	}
-
-	return o, nil
-}
-
-// -------------------------------------------------------------------------------------------------
-func (s *service) WithdrawOrder(ctx context.Context, orderID uuid.UUID, submittedBy string) error {
-	o, err := s.repo.GetByID(ctx, s.db, orderID)
-	if err != nil {
-		return domainerrors.OrderNotFound(orderID.String())
-	}
-	if o.SubmittedBy != submittedBy {
-		return domainerrors.OrderNotOwner()
-	}
-	if err := o.Withdraw(); err != nil {
-		return err
-	}
-	return s.repo.Update(ctx, s.db, o)
-}
 
 // -------------------------------------------------------------------------------------------------
 func (s *service) GetOrderDetails(ctx context.Context, orderID uuid.UUID, submittedBy string) (*Order, error) {
@@ -97,31 +61,12 @@ func (s *service) GetOrderDetails(ctx context.Context, orderID uuid.UUID, submit
 }
 
 // -------------------------------------------------------------------------------------------------
-func (s *service) GetByID(ctx context.Context, id uuid.UUID) (*Order, error) {
-	o, err := s.repo.GetByID(ctx, s.db, id)
-	if err != nil {
-		return nil, domainerrors.OrderNotFound(id.String())
-	}
-	return o, nil
-}
-
-// -------------------------------------------------------------------------------------------------
 func (s *service) GetByDroneID(ctx context.Context, droneID string) (*Order, error) {
 	o, err := s.repo.GetByDroneID(ctx, s.db, droneID)
 	if err != nil {
 		return nil, domainerrors.NewNotFound("order", "assigned to drone "+droneID)
 	}
 	return o, nil
-}
-
-// -------------------------------------------------------------------------------------------------
-func (s *service) SaveWithTx(ctx context.Context, tx sqlx.ExtContext, o *Order) error {
-	return s.repo.Update(ctx, tx, o)
-}
-
-// -------------------------------------------------------------------------------------------------
-func (s *service) GetByIDWithTx(ctx context.Context, tx sqlx.ExtContext, id uuid.UUID) (*Order, error) {
-	return s.repo.GetByID(ctx, tx, id)
 }
 
 // -------------------------------------------------------------------------------------------------

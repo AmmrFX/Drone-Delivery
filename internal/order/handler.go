@@ -10,17 +10,18 @@ import (
 	"github.com/google/uuid"
 )
 
-// JobCreator is a local interface to avoid importing the job package (circular dep).
-type JobCreator interface {
-	CreateJob(ctx context.Context, orderID string) error
+// JobManager is a local interface to avoid importing the job package (circular dep).
+type JobManager interface {
+	CreateOrderAndJob(ctx context.Context, o *Order) error
+	CancelOrderAndJob(ctx context.Context, orderID uuid.UUID, submittedBy string) error
 }
 
 type Handler struct {
 	service    Service
-	jobService JobCreator
+	jobService JobManager
 }
 
-func NewHandler(service Service, jobService JobCreator) *Handler {
+func NewHandler(service Service, jobService JobManager) *Handler {
 	return &Handler{service: service, jobService: jobService}
 }
 
@@ -33,16 +34,12 @@ func (h *Handler) PlaceOrder(c *gin.Context) {
 	}
 
 	sub := c.GetString("sub")
-	o, err := h.service.PlaceOrder(c.Request.Context(), sub, req.Origin, req.Destination)
-	if err != nil {
-		apperrors.ToHTTPError(c, err)
-		return
-	}
-	if err := h.jobService.CreateJob(c.Request.Context(), o.ID.String()); err != nil {
-		apperrors.ToHTTPError(c, err)
-		return
-	}
+	o := NewOrder(sub, req.Origin, req.Destination)
 
+	if err := h.jobService.CreateOrderAndJob(c.Request.Context(),o); err != nil {
+		apperrors.ToHTTPError(c, err)
+		return
+	}
 	c.JSON(http.StatusCreated, OrderResponse{Order: o})
 }
 
@@ -55,7 +52,8 @@ func (h *Handler) WithdrawOrder(c *gin.Context) {
 	}
 
 	sub := c.GetString("sub")
-	if err := h.service.WithdrawOrder(c.Request.Context(), id, sub); err != nil {
+
+	if err := h.jobService.CancelOrderAndJob(c.Request.Context(), id, sub); err != nil {
 		apperrors.ToHTTPError(c, err)
 		return
 	}

@@ -1,0 +1,216 @@
+### ─────────────────────────────────────────────────
+### Drone Delivery API — REST Client (.http)
+### ─────────────────────────────────────────────────
+
+@base = http://localhost:8080
+
+### ═══════════════════════════════════════════════════
+### Health
+### ═══════════════════════════════════════════════════
+
+### Health check
+GET {{base}}/health
+
+### ═══════════════════════════════════════════════════
+### Auth — Generate tokens for each role
+### ═══════════════════════════════════════════════════
+
+### Get enduser token
+# @name loginEnduser
+POST {{base}}/auth/token
+Content-Type: application/x-www-form-urlencoded
+
+name=alice&role=enduser
+
+###
+
+### Get drone token
+# @name loginDrone
+POST {{base}}/auth/token
+Content-Type: application/x-www-form-urlencoded
+
+name=drone-01&role=drone
+
+###
+
+### Get admin token
+# @name loginAdmin
+POST {{base}}/auth/token
+Content-Type: application/x-www-form-urlencoded
+
+name=admin1&role=admin
+
+###
+
+@enduserToken = {{loginEnduser.response.body.token}}
+@droneToken   = {{loginDrone.response.body.token}}
+@adminToken   = {{loginAdmin.response.body.token}}
+
+### ═══════════════════════════════════════════════════
+### Enduser — Orders
+### ═══════════════════════════════════════════════════
+
+### Place order
+# @name placeOrder
+POST {{base}}/orders
+Content-Type: application/json
+Authorization: Bearer {{enduserToken}}
+
+{
+  "origin": {
+    "lat": 24.7136,
+    "lng": 46.6753
+  },
+  "destination": {
+    "lat": 24.8000,
+    "lng": 46.7000
+  }
+}
+
+###
+
+@orderId = {{placeOrder.response.body.order.id}}
+
+### Get order details
+GET {{base}}/orders/{{orderId}}
+Authorization: Bearer {{enduserToken}}
+
+###
+
+### Withdraw order
+DELETE {{base}}/orders/{{orderId}}
+Authorization: Bearer {{enduserToken}}
+
+### ═══════════════════════════════════════════════════
+### Drone — Heartbeat & Jobs
+### ═══════════════════════════════════════════════════
+
+### Send heartbeat
+POST {{base}}/drone/me/heartbeat
+Content-Type: application/json
+Authorization: Bearer {{droneToken}}
+
+{
+  "latitude": 24.7136,
+  "longitude": 46.6753
+}
+
+###
+
+### List open jobs
+# @name listJobs
+GET {{base}}/drone/jobs
+Authorization: Bearer {{droneToken}}
+
+###
+
+### Reserve a job
+POST {{base}}/drone/jobs/reserve
+Content-Type: application/json
+Authorization: Bearer {{droneToken}}
+
+{
+  "job_id": "PASTE_JOB_ID_HERE"
+}
+
+###
+
+### Grab order (confirm pickup)
+POST {{base}}/drone/orders/{{orderId}}/grab
+Authorization: Bearer {{droneToken}}
+
+###
+
+### Complete delivery — delivered
+PATCH {{base}}/drone/orders/{{orderId}}/complete
+Content-Type: application/json
+Authorization: Bearer {{droneToken}}
+
+{
+  "status": "delivered"
+}
+
+###
+
+### Complete delivery — failed
+PATCH {{base}}/drone/orders/{{orderId}}/complete
+Content-Type: application/json
+Authorization: Bearer {{droneToken}}
+
+{
+  "status": "failed"
+}
+
+###
+
+### Get current order assigned to drone
+GET {{base}}/drone/me/order
+Authorization: Bearer {{droneToken}}
+
+###
+
+### Report drone broken
+POST {{base}}/drone/me/broken
+Authorization: Bearer {{droneToken}}
+
+### ═══════════════════════════════════════════════════
+### Admin — Orders & Drones
+### ═══════════════════════════════════════════════════
+
+### List all orders (paginated)
+GET {{base}}/admin/orders?page=1&limit=20
+Authorization: Bearer {{adminToken}}
+
+###
+
+### List orders by status
+GET {{base}}/admin/orders?status=PENDING&page=1&limit=20
+Authorization: Bearer {{adminToken}}
+
+###
+
+### Update order (change destination)
+PATCH {{base}}/admin/orders/{{orderId}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "destination": {
+    "lat": 24.8500,
+    "lng": 46.7200
+  }
+}
+
+###
+
+### List all drones (paginated)
+GET {{base}}/admin/drones?page=1&limit=20
+Authorization: Bearer {{adminToken}}
+
+###
+
+### List drones by status
+GET {{base}}/admin/drones?status=IDLE&page=1&limit=20
+Authorization: Bearer {{adminToken}}
+
+###
+
+### Mark drone as broken
+PATCH {{base}}/admin/drones/drone-01/status
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "broken"
+}
+
+###
+
+### Mark drone as fixed
+PATCH {{base}}/admin/drones/drone-01/status
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "fixed"
+}
