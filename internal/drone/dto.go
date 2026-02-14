@@ -32,3 +32,13 @@ type DroneBrokenEvent struct {
 	Location common.Location
 	OrderID  *uuid.UUID
 }
+
+type HeartbeatRequest struct {
+	Latitude  float64 `json:"latitude" binding:"required"`
+	Longitude float64 `json:"longitude" binding:"required"`
+}
+
+type HeartbeatResponse struct {
+	DroneStatus    Status  `json:"drone_status"`
+	CurrentOrderID *string `json:"current_order_id,omitempty"`
+}

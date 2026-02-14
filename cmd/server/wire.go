@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	goredis "github.com/redis/go-redis/v9"
 
@@ -61,10 +60,6 @@ func (a *orderQueryAdapter) GetByDroneID(ctx context.Context, droneID string) (a
 	return a.svc.GetByDroneID(ctx, droneID)
 }
 
-func (a *orderQueryAdapter) AwaitHandoffWithTx(ctx context.Context, tx sqlx.ExtContext, orderID uuid.UUID) error {
-	return a.svc.AwaitHandoffWithTx(ctx, tx, orderID)
-}
-
 func wireApp(cfg *config.Config) (*AppContext, error) {
 	// ── Postgres ──
 	db, err := sqlx.Connect("postgres", cfg.Postgres.DSN())
@@ -105,15 +100,15 @@ func wireApp(cfg *config.Config) (*AppContext, error) {
 	zoneCenter := common.NewLocation(cfg.Zone.CenterLat, cfg.Zone.CenterLng)
 	droneService := drone.NewDroneService(droneRepo, db, droneCache, zoneCenter, cfg.Zone.RadiusKM)
 	jobService := job.NewService(jobRepo, db)
-	adminService := admin.NewService(orderService, droneService, jobService, db)
-	authService := auth.NewAuthService(jwtService)
 	deliveryService := delivery.NewService(db, deliveryRepo)
+	adminService := admin.NewService(orderService, droneService, deliveryService)
+	authService := auth.NewAuthService(jwtService)
 
 	// ── Handlers ──
 
 	authHandler := auth.NewHandler(authService)
 	orderHandler := order.NewHandler(orderService, deliveryService)
-	droneHandler := drone.NewHandler(droneService, &orderQueryAdapter{svc: orderService}, jobService, db)
+	droneHandler := drone.NewHandler(droneService, &orderQueryAdapter{svc: orderService}, deliveryService)
 	jobHandler := job.NewHandler(jobService, deliveryService)
 	adminHandler := admin.NewHandler(adminService, orderService, droneService)
 

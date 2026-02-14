@@ -19,6 +19,7 @@ type Repository interface {
 	ReserveJobAndAssign(ctx context.Context, db *sqlx.DB, jobID, droneID string) (*job.Job, error)
 	GrabOrder(ctx context.Context, db *sqlx.DB, orderID uuid.UUID, droneID string) error
 	CompleteDelivery(ctx context.Context, db *sqlx.DB, orderID uuid.UUID, droneID string, delivered bool) error
+	HandleDroneBroken(ctx context.Context, db *sqlx.DB, droneID string) error
 }
 
 type repo struct {
@@ -216,6 +217,51 @@ func (r *repo) CompleteDelivery(ctx context.Context, db *sqlx.DB, orderID uuid.U
 			if updateErr := r.jobRepo.Update(ctx, tx, j); updateErr != nil {
 				return domainerrors.NewInternal(fmt.Sprintf("failed to complete job for order %s", orderID), updateErr)
 			}
+		}
+	}
+
+	return tx.Commit()
+}
+
+// --------------------------------------------------------------
+// HandleDroneBroken marks the drone as broken, transitions its order to
+// awaiting handoff, and creates a new job — all in one transaction.
+func (r *repo) HandleDroneBroken(ctx context.Context, db *sqlx.DB, droneID string) error {
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		return domainerrors.NewInternal("failed to begin transaction", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Get drone and mark broken
+	d, err := r.droneRepo.GetByID(ctx, tx, droneID)
+	if err != nil {
+		return domainerrors.DroneNotFound(droneID)
+	}
+	event, err := d.MarkBroken()
+	if err != nil {
+		return err
+	}
+	if err := r.droneRepo.Update(ctx, tx, d); err != nil {
+		return domainerrors.NewInternal("failed to update drone", err)
+	}
+
+	// 2. If drone had an order, await handoff and create new job
+	if event.OrderID != nil {
+		o, err := r.orderRepo.GetByID(ctx, tx, *event.OrderID)
+		if err != nil {
+			return domainerrors.NewNotFound("order", event.OrderID.String())
+		}
+		if err := o.AwaitHandoff(); err != nil {
+			return err
+		}
+		if err := r.orderRepo.Update(ctx, tx, o); err != nil {
+			return domainerrors.NewInternal("failed to update order", err)
+		}
+
+		j := job.NewJob(event.OrderID.String())
+		if err := r.jobRepo.Create(ctx, tx, j); err != nil {
+			return domainerrors.NewInternal("failed to create handoff job", err)
 		}
 	}
 

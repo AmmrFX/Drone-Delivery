@@ -4,13 +4,12 @@ import (
 	"context"
 
 	"drone-delivery/internal/common"
+	"drone-delivery/internal/delivery"
 	"drone-delivery/internal/drone"
 	domainerrors "drone-delivery/internal/errors"
-	"drone-delivery/internal/job"
 	"drone-delivery/internal/order"
 
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 )
 
 type Service interface {
@@ -23,46 +22,17 @@ type Service interface {
 }
 
 type service struct {
-	orderService order.Service
-	droneService drone.Service
-	jobService   job.Service
-	db           *sqlx.DB
+	orderService    order.Service
+	droneService    drone.Service
+	deliveryService delivery.Service
 }
 
-func NewService(orderService order.Service, droneService drone.Service, jobService job.Service, db *sqlx.DB) Service {
-	return &service{orderService: orderService, droneService: droneService, jobService: jobService, db: db}
+func NewService(orderService order.Service, droneService drone.Service, deliveryService delivery.Service) Service {
+	return &service{orderService: orderService, droneService: droneService, deliveryService: deliveryService}
 }
 
 func (s *service) HandleDroneBroken(ctx context.Context, droneID string) error {
-	tx, err := s.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return domainerrors.NewInternal("failed to begin transaction", err)
-	}
-	defer tx.Rollback()
-
-	d, err := s.droneService.GetByIDWithTx(ctx, tx, droneID)
-	if err != nil {
-		return domainerrors.DroneNotFound(droneID)
-	}
-
-	event, err := d.MarkBroken()
-	if err != nil {
-		return err
-	}
-	if err := s.droneService.UpdateWithTx(ctx, tx, d); err != nil {
-		return domainerrors.NewInternal("failed to update drone", err)
-	}
-
-	if event.OrderID != nil {
-		if err := s.orderService.AwaitHandoffWithTx(ctx, tx, *event.OrderID); err != nil {
-			return err
-		}
-		if err := s.jobService.CreateJobWithTx(ctx, tx, event.OrderID.String()); err != nil {
-			return domainerrors.NewInternal("failed to create handoff job", err)
-		}
-	}
-
-	return tx.Commit()
+	return s.deliveryService.HandleDroneBroken(ctx, droneID)
 }
 
 func (s *service) MarkDroneFixed(ctx context.Context, droneID string) error {
@@ -73,7 +43,7 @@ func (s *service) MarkDroneFixed(ctx context.Context, droneID string) error {
 	if err := d.MarkFixed(); err != nil {
 		return err
 	}
-	return s.droneService.UpdateStatus(ctx, droneID, d)
+	return s.droneService.UpdateStatus(ctx, d)
 }
 
 func (s *service) ListOrders(ctx context.Context, status *order.Status, page, limit int) ([]*order.Order, int, error) {

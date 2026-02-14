@@ -16,6 +16,7 @@ type Service interface {
 	ReserveJobAndAssign(ctx context.Context, jobID, droneID string) (*job.Job, error)
 	GrabOrder(ctx context.Context, orderID uuid.UUID, droneID string) error
 	CompleteDelivery(ctx context.Context, orderID uuid.UUID, droneID string, delivered bool) error
+	HandleDroneBroken(ctx context.Context, droneID string) error
 }
 
 type service struct {
@@ -45,4 +46,8 @@ func (s *service) GrabOrder(ctx context.Context, orderID uuid.UUID, droneID stri
 
 func (s *service) CompleteDelivery(ctx context.Context, orderID uuid.UUID, droneID string, delivered bool) error {
 	return s.repo.CompleteDelivery(ctx, s.db, orderID, droneID, delivered)
+}
+
+func (s *service) HandleDroneBroken(ctx context.Context, droneID string) error {
+	return s.repo.HandleDroneBroken(ctx, s.db, droneID)
 }

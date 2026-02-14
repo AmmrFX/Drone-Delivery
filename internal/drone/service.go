@@ -13,12 +13,10 @@ import (
 type Service interface {
 	EnsureExists(ctx context.Context, droneID string) (*Drone, error)
 	GetByID(ctx context.Context, id string) (*Drone, error)
-	GetByIDWithTx(ctx context.Context, tx sqlx.ExtContext, id string) (*Drone, error)
-	UpdateWithTx(ctx context.Context, tx sqlx.ExtContext, d *Drone) error
 	Heartbeat(ctx context.Context, droneID string, lat, lng float64) (*Drone, error)
 	GetDroneLocation(ctx context.Context, droneID string) (*common.Location, error)
 	ListAll(ctx context.Context, status *Status, page, limit int) ([]*Drone, int, error)
-	UpdateStatus(ctx context.Context, droneID string, d *Drone) error
+	UpdateStatus(ctx context.Context, d *Drone) error
 }
 
 type service struct {
@@ -39,6 +37,7 @@ func NewDroneService(repo Repository, db *sqlx.DB, cache *redis.DroneLocationCac
 	}
 }
 
+// --------------------------------------------------------------
 func (s *service) EnsureExists(ctx context.Context, droneID string) (*Drone, error) {
 	d, err := s.repo.GetByID(ctx, s.db, droneID)
 	if err != nil {
@@ -50,6 +49,7 @@ func (s *service) EnsureExists(ctx context.Context, droneID string) (*Drone, err
 	return d, nil
 }
 
+// --------------------------------------------------------------
 func (s *service) GetByID(ctx context.Context, id string) (*Drone, error) {
 	d, err := s.repo.GetByID(ctx, s.db, id)
 	if err != nil {
@@ -58,14 +58,7 @@ func (s *service) GetByID(ctx context.Context, id string) (*Drone, error) {
 	return d, nil
 }
 
-func (s *service) GetByIDWithTx(ctx context.Context, tx sqlx.ExtContext, id string) (*Drone, error) {
-	return s.repo.GetByID(ctx, tx, id)
-}
-
-func (s *service) UpdateWithTx(ctx context.Context, tx sqlx.ExtContext, d *Drone) error {
-	return s.repo.Update(ctx, tx, d)
-}
-
+// --------------------------------------------------------------
 func (s *service) Heartbeat(ctx context.Context, droneID string, lat, lng float64) (*Drone, error) {
 	if err := common.ValidateLatLng(lat, lng); err != nil {
 		return nil, domainerrors.NewValidation(err.Error())
@@ -85,11 +78,14 @@ func (s *service) Heartbeat(ctx context.Context, droneID string, lat, lng float6
 		return nil, domainerrors.NewInternal("failed to update drone location", err)
 	}
 
-	_ = s.cache.Set(ctx, droneID, loc)
+	if err = s.cache.Set(ctx, droneID, loc); err != nil {
+		return nil, domainerrors.NewInternal("failed to update drone location", err)
+	}
 
 	return d, nil
 }
 
+// --------------------------------------------------------------
 func (s *service) GetDroneLocation(ctx context.Context, droneID string) (*common.Location, error) {
 	cached, err := s.cache.Get(ctx, droneID)
 	if err == nil && cached != nil {
@@ -103,15 +99,19 @@ func (s *service) GetDroneLocation(ctx context.Context, droneID string) (*common
 	}
 	loc := d.Location()
 
-	_ = s.cache.Set(ctx, droneID, loc)
+	if err = s.cache.Set(ctx, droneID, loc); err != nil {
+		return nil, domainerrors.NewInternal("failed to update drone location", err)
+	}
 
 	return &loc, nil
 }
 
+// --------------------------------------------------------------
 func (s *service) ListAll(ctx context.Context, status *Status, page, limit int) ([]*Drone, int, error) {
 	return s.repo.ListAll(ctx, s.db, status, page, limit)
 }
 
-func (s *service) UpdateStatus(ctx context.Context, droneID string, d *Drone) error {
+// --------------------------------------------------------------
+func (s *service) UpdateStatus(ctx context.Context, d *Drone) error {
 	return s.repo.Update(ctx, s.db, d)
 }
