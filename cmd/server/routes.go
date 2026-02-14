@@ -25,12 +25,19 @@ func (a *AppContext) setupRoutes() {
 	// ── Enduser Routes (role: enduser) ──
 	enduserGroup := r.Group("")
 	enduserGroup.Use(middleware.RoleGuard("enduser"))
-	enduserGroup.Use(middleware.Bulkhead(a.Config.Bulkhead.MutationPool)) // 5. Bulkhead
-	enduserGroup.Use(middleware.Idempotency(a.IdempotencyStore))          // 7. Idempotency
 	{
-		enduserGroup.POST("/orders", a.OrderHandler.PlaceOrder)
-		enduserGroup.DELETE("/orders/:id", a.OrderHandler.WithdrawOrder)
+		// Read-only endpoints
+		enduserGroup.GET("/orders", a.OrderHandler.ListMyOrders)
 		enduserGroup.GET("/orders/:id", a.OrderHandler.GetOrderDetails)
+
+		// Mutations get bulkhead + idempotency
+		enduserMutations := enduserGroup.Group("")
+		enduserMutations.Use(middleware.Bulkhead(a.Config.Bulkhead.MutationPool))
+		enduserMutations.Use(middleware.Idempotency(a.IdempotencyStore))
+		{
+			enduserMutations.POST("/orders", a.OrderHandler.PlaceOrder)
+			enduserMutations.DELETE("/orders/:id", a.OrderHandler.WithdrawOrder)
+		}
 	}
 
 	// ── Drone Routes (role: drone) ──

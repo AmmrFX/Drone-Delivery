@@ -84,7 +84,7 @@ func (r *repo) ReserveJobAndAssign(ctx context.Context, db *sqlx.DB, jobID, dron
 	defer tx.Rollback()
 
 	// 1. Reserve job
-	j, err := r.jobRepo.GetByID(ctx, tx, jobID)
+	j, err := r.jobRepo.GetByIDForUpdate(ctx, tx, jobID)
 	if err != nil {
 		return nil, domainerrors.JobNotFound(jobID)
 	}
@@ -100,7 +100,7 @@ func (r *repo) ReserveJobAndAssign(ctx context.Context, db *sqlx.DB, jobID, dron
 	if err != nil {
 		return nil, domainerrors.NewValidation("invalid order id in job")
 	}
-	o, err := r.orderRepo.GetByID(ctx, tx, orderID)
+	o, err := r.orderRepo.GetByIDForUpdate(ctx, tx, orderID)
 	if err != nil {
 		return nil, domainerrors.NewNotFound("order", orderID.String())
 	}
@@ -111,8 +111,14 @@ func (r *repo) ReserveJobAndAssign(ctx context.Context, db *sqlx.DB, jobID, dron
 		return nil, domainerrors.NewInternal("failed to assign order", err)
 	}
 
-	// 3. Reserve drone
-	d, err := r.droneRepo.GetByID(ctx, tx, droneID)
+	// 3. Ensure drone exists, then reserve it
+	if _, err := r.droneRepo.GetByID(ctx, tx, droneID); err != nil {
+		newDrone := drone.New(droneID)
+		if err := r.droneRepo.Upsert(ctx, tx, newDrone); err != nil {
+			return nil, domainerrors.NewInternal("failed to ensure drone exists", err)
+		}
+	}
+	d, err := r.droneRepo.GetByIDForUpdate(ctx, tx, droneID)
 	if err != nil {
 		return nil, domainerrors.NewNotFound("drone", droneID)
 	}
@@ -140,7 +146,7 @@ func (r *repo) GrabOrder(ctx context.Context, db *sqlx.DB, orderID uuid.UUID, dr
 	defer tx.Rollback()
 
 	// 1. Mark order picked up
-	o, err := r.orderRepo.GetByID(ctx, tx, orderID)
+	o, err := r.orderRepo.GetByIDForUpdate(ctx, tx, orderID)
 	if err != nil {
 		return domainerrors.NewNotFound("order", orderID.String())
 	}
@@ -155,7 +161,7 @@ func (r *repo) GrabOrder(ctx context.Context, db *sqlx.DB, orderID uuid.UUID, dr
 	}
 
 	// 2. Drone starts delivery
-	d, err := r.droneRepo.GetByID(ctx, tx, droneID)
+	d, err := r.droneRepo.GetByIDForUpdate(ctx, tx, droneID)
 	if err != nil {
 		return domainerrors.NewNotFound("drone", droneID)
 	}
@@ -180,7 +186,7 @@ func (r *repo) CompleteDelivery(ctx context.Context, db *sqlx.DB, orderID uuid.U
 	defer tx.Rollback()
 
 	// 1. Update order status
-	o, err := r.orderRepo.GetByID(ctx, tx, orderID)
+	o, err := r.orderRepo.GetByIDForUpdate(ctx, tx, orderID)
 	if err != nil {
 		return domainerrors.NewNotFound("order", orderID.String())
 	}
@@ -201,7 +207,7 @@ func (r *repo) CompleteDelivery(ctx context.Context, db *sqlx.DB, orderID uuid.U
 	}
 
 	// 2. Drone goes idle
-	d, err := r.droneRepo.GetByID(ctx, tx, droneID)
+	d, err := r.droneRepo.GetByIDForUpdate(ctx, tx, droneID)
 	if err != nil {
 		return domainerrors.NewNotFound("drone", droneID)
 	}
@@ -211,13 +217,15 @@ func (r *repo) CompleteDelivery(ctx context.Context, db *sqlx.DB, orderID uuid.U
 	}
 
 	// 3. Complete the job
-	j, err := r.jobRepo.GetByOrderID(ctx, tx, orderID.String())
-	if err == nil && j != nil {
-		if err := j.Complete(); err == nil {
-			if updateErr := r.jobRepo.Update(ctx, tx, j); updateErr != nil {
-				return domainerrors.NewInternal(fmt.Sprintf("failed to complete job for order %s", orderID), updateErr)
-			}
-		}
+	j, err := r.jobRepo.GetByOrderIDForUpdate(ctx, tx, orderID.String())
+	if err != nil {
+		return domainerrors.NewInternal(fmt.Sprintf("failed to find job for order %s", orderID), err)
+	}
+	if err := j.Complete(); err != nil {
+		return fmt.Errorf("failed to complete job for order %s: %w", orderID, err)
+	}
+	if err := r.jobRepo.Update(ctx, tx, j); err != nil {
+		return domainerrors.NewInternal(fmt.Sprintf("failed to update job for order %s", orderID), err)
 	}
 
 	return tx.Commit()
@@ -234,29 +242,37 @@ func (r *repo) HandleDroneBroken(ctx context.Context, db *sqlx.DB, droneID strin
 	defer tx.Rollback()
 
 	// 1. Get drone and mark broken
-	d, err := r.droneRepo.GetByID(ctx, tx, droneID)
+	d, err := r.droneRepo.GetByIDForUpdate(ctx, tx, droneID)
 	if err != nil {
 		return domainerrors.DroneNotFound(droneID)
 	}
+
 	event, err := d.MarkBroken()
 	if err != nil {
 		return err
 	}
+
 	if err := r.droneRepo.Update(ctx, tx, d); err != nil {
 		return domainerrors.NewInternal("failed to update drone", err)
 	}
 
 	// 2. If drone had an order, await handoff and create new job
 	if event.OrderID != nil {
-		o, err := r.orderRepo.GetByID(ctx, tx, *event.OrderID)
+		o, err := r.orderRepo.GetByIDForUpdate(ctx, tx, *event.OrderID)
 		if err != nil {
 			return domainerrors.NewNotFound("order", event.OrderID.String())
 		}
+
 		if err := o.AwaitHandoff(); err != nil {
 			return err
 		}
+
 		if err := r.orderRepo.Update(ctx, tx, o); err != nil {
 			return domainerrors.NewInternal("failed to update order", err)
+		}
+
+		if err := r.jobRepo.CancelByOrderID(ctx, tx, event.OrderID.String()); err != nil {
+			return domainerrors.NewInternal("failed to cancel job", err)
 		}
 
 		j := job.NewJob(event.OrderID.String())

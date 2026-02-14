@@ -68,11 +68,20 @@ func wireApp(cfg *config.Config) (*AppContext, error) {
 	}
 
 	// ── Redis ──
-	rdb := goredis.NewClient(&goredis.Options{
-		Addr:     cfg.Redis.Addr(),
-		Password: cfg.Redis.Password,
-		DB:       cfg.Redis.DB,
-	})
+	var rdb *goredis.Client
+	if cfg.Redis.URL != "" {
+		opts, err := goredis.ParseURL(cfg.Redis.URL)
+		if err != nil {
+			return nil, fmt.Errorf("redis parse url: %w", err)
+		}
+		rdb = goredis.NewClient(opts)
+	} else {
+		rdb = goredis.NewClient(&goredis.Options{
+			Addr:     cfg.Redis.Addr(),
+			Password: cfg.Redis.Password,
+			DB:       cfg.Redis.DB,
+		})
+	}
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
 		return nil, fmt.Errorf("redis: %w", err)
 	}
@@ -107,7 +116,7 @@ func wireApp(cfg *config.Config) (*AppContext, error) {
 	// ── Handlers ──
 
 	authHandler := auth.NewHandler(authService)
-	orderHandler := order.NewHandler(orderService, deliveryService)
+	orderHandler := order.NewHandler(orderService, deliveryService, droneService)
 	droneHandler := drone.NewHandler(droneService, &orderQueryAdapter{svc: orderService}, deliveryService)
 	jobHandler := job.NewHandler(jobService, deliveryService)
 	adminHandler := admin.NewHandler(adminService, orderService, droneService)

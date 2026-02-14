@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: drone-delivery-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: POSTGRES_SSLMODE
+        value: require
+      - key: MAPBOX_ACCESS_TOKEN
+        sync: false
+      - key: GIN_MODE
+        value: release

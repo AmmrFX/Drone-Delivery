@@ -12,10 +12,12 @@ const columns = `id, order_id, status, reserved_by_drone_id, created_at, updated
 type Repository interface {
 	Create(ctx context.Context, ext sqlx.ExtContext, j *Job) error
 	GetByID(ctx context.Context, ext sqlx.ExtContext, id string) (*Job, error)
+	GetByIDForUpdate(ctx context.Context, ext sqlx.ExtContext, id string) (*Job, error)
 	Update(ctx context.Context, ext sqlx.ExtContext, j *Job) error
 	ListAll(ctx context.Context, ext sqlx.ExtContext, status *Status, page, limit int) ([]*Job, int, error)
 	ListByStatus(ctx context.Context, ext sqlx.ExtContext, status Status) ([]*Job, error)
 	GetByOrderID(ctx context.Context, ext sqlx.ExtContext, orderID string) (*Job, error)
+	GetByOrderIDForUpdate(ctx context.Context, ext sqlx.ExtContext, orderID string) (*Job, error)
 	CancelByJobID(ctx context.Context, ext sqlx.ExtContext, id string) error
 	CancelByOrderID(ctx context.Context, ext sqlx.ExtContext, orderID string) error
 }
@@ -38,6 +40,17 @@ func (r *repo) Create(ctx context.Context, ext sqlx.ExtContext, j *Job) error {
 func (r *repo) GetByID(ctx context.Context, ext sqlx.ExtContext, id string) (*Job, error) {
 	var j Job
 	query := fmt.Sprintf(`SELECT %s FROM jobs WHERE id = $1`, columns)
+	err := sqlx.GetContext(ctx, ext, &j, query, id)
+	if err != nil {
+		return nil, err
+	}
+	return &j, nil
+}
+
+// --------------------------------------------------------------
+func (r *repo) GetByIDForUpdate(ctx context.Context, ext sqlx.ExtContext, id string) (*Job, error) {
+	var j Job
+	query := fmt.Sprintf(`SELECT %s FROM jobs WHERE id = $1 FOR UPDATE`, columns)
 	err := sqlx.GetContext(ctx, ext, &j, query, id)
 	if err != nil {
 		return nil, err
@@ -97,6 +110,17 @@ func (r *repo) ListByStatus(ctx context.Context, ext sqlx.ExtContext, status Sta
 func (r *repo) GetByOrderID(ctx context.Context, ext sqlx.ExtContext, orderID string) (*Job, error) {
 	var j Job
 	query := fmt.Sprintf(`SELECT %s FROM jobs WHERE order_id = $1 AND status != 'CANCELLED' ORDER BY created_at DESC LIMIT 1`, columns)
+	err := sqlx.GetContext(ctx, ext, &j, query, orderID)
+	if err != nil {
+		return nil, err
+	}
+	return &j, nil
+}
+
+// --------------------------------------------------------------
+func (r *repo) GetByOrderIDForUpdate(ctx context.Context, ext sqlx.ExtContext, orderID string) (*Job, error) {
+	var j Job
+	query := fmt.Sprintf(`SELECT %s FROM jobs WHERE order_id = $1 AND status != 'CANCELLED' ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, columns)
 	err := sqlx.GetContext(ctx, ext, &j, query, orderID)
 	if err != nil {
 		return nil, err

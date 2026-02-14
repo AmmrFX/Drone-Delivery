@@ -11,8 +11,10 @@ import (
 )
 
 type Service interface {
+	ValidateLocation(loc common.Location, label string) error
 	GetOrderDetails(ctx context.Context, orderID uuid.UUID, submittedBy string) (*Order, error)
 	GetByDroneID(ctx context.Context, droneID string) (*Order, error)
+	ListMyOrders(ctx context.Context, submittedBy string) ([]*Order, error)
 	AwaitHandoffWithTx(ctx context.Context, tx sqlx.ExtContext, orderID uuid.UUID) error
 	ListAll(ctx context.Context, status *Status, page, limit int) ([]*Order, int, error)
 	AdminUpdateOrder(ctx context.Context, orderID uuid.UUID, origin, destination *common.Location) (*Order, error)
@@ -36,7 +38,7 @@ func NewOrderService(repo Repository, db *sqlx.DB, zone ZoneConfig, mapbox *comm
 }
 
 // -------------------------------------------------------------------------------------------------
-func (s *service) validateLocation(loc common.Location, label string) error {
+func (s *service) ValidateLocation(loc common.Location, label string) error {
 	if err := common.ValidateLatLng(loc.Lat, loc.Lng); err != nil {
 		return domainerrors.NewValidation(err.Error())
 	}
@@ -46,7 +48,6 @@ func (s *service) validateLocation(loc common.Location, label string) error {
 	}
 	return nil
 }
-
 
 // -------------------------------------------------------------------------------------------------
 func (s *service) GetOrderDetails(ctx context.Context, orderID uuid.UUID, submittedBy string) (*Order, error) {
@@ -70,6 +71,11 @@ func (s *service) GetByDroneID(ctx context.Context, droneID string) (*Order, err
 }
 
 // -------------------------------------------------------------------------------------------------
+func (s *service) ListMyOrders(ctx context.Context, submittedBy string) ([]*Order, error) {
+	return s.repo.ListBySubmitter(ctx, s.db, submittedBy)
+}
+
+// -------------------------------------------------------------------------------------------------
 func (s *service) ListAll(ctx context.Context, status *Status, page, limit int) ([]*Order, int, error) {
 	return s.repo.ListAll(ctx, s.db, status, page, limit)
 }
@@ -82,7 +88,7 @@ func (s *service) AdminUpdateOrder(ctx context.Context, orderID uuid.UUID, origi
 	}
 
 	if origin != nil {
-		if err := s.validateLocation(*origin, "new origin"); err != nil {
+		if err := s.ValidateLocation(*origin, "new origin"); err != nil {
 			return nil, err
 		}
 		if err := o.UpdateOrigin(*origin); err != nil {
@@ -90,7 +96,7 @@ func (s *service) AdminUpdateOrder(ctx context.Context, orderID uuid.UUID, origi
 		}
 	}
 	if destination != nil {
-		if err := s.validateLocation(*destination, "new destination"); err != nil {
+		if err := s.ValidateLocation(*destination, "new destination"); err != nil {
 			return nil, err
 		}
 		if err := o.UpdateDestination(*destination); err != nil {

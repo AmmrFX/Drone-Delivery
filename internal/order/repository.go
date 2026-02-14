@@ -13,6 +13,7 @@ const columns = `id, submitted_by, origin_lat, origin_lng, dest_lat, dest_lng, s
 type Repository interface {
 	Create(ctx context.Context, ext sqlx.ExtContext, o *Order) error
 	GetByID(ctx context.Context, ext sqlx.ExtContext, id uuid.UUID) (*Order, error)
+	GetByIDForUpdate(ctx context.Context, ext sqlx.ExtContext, id uuid.UUID) (*Order, error)
 	Update(ctx context.Context, ext sqlx.ExtContext, o *Order) error
 	ListBySubmitter(ctx context.Context, ext sqlx.ExtContext, submittedBy string) ([]*Order, error)
 	ListAll(ctx context.Context, ext sqlx.ExtContext, status *Status, page, limit int) ([]*Order, int, error)
@@ -37,6 +38,16 @@ func (r *repo) Create(ctx context.Context, ext sqlx.ExtContext, o *Order) error 
 func (r *repo) GetByID(ctx context.Context, ext sqlx.ExtContext, id uuid.UUID) (*Order, error) {
 	var o Order
 	query := fmt.Sprintf(`SELECT %s FROM orders WHERE id = $1`, columns)
+	err := sqlx.GetContext(ctx, ext, &o, query, id)
+	if err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
+func (r *repo) GetByIDForUpdate(ctx context.Context, ext sqlx.ExtContext, id uuid.UUID) (*Order, error) {
+	var o Order
+	query := fmt.Sprintf(`SELECT %s FROM orders WHERE id = $1 FOR UPDATE`, columns)
 	err := sqlx.GetContext(ctx, ext, &o, query, id)
 	if err != nil {
 		return nil, err

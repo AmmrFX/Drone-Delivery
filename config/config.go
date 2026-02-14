@@ -33,6 +33,7 @@ type JWTConfig struct {
 }
 
 type PostgresConfig struct {
+	URL      string // DATABASE_URL takes precedence if set
 	Host     string
 	Port     int
 	User     string
@@ -42,6 +43,7 @@ type PostgresConfig struct {
 }
 
 type RedisConfig struct {
+	URL      string // REDIS_URL takes precedence if set
 	Host     string
 	Port     int
 	Password string
@@ -117,7 +119,7 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		Server: ServerConfig{
-			Port:            getenvInt("SERVER_PORT", 8080),
+			Port:            getenvInt("PORT", getenvInt("SERVER_PORT", 8080)),
 			ShutdownTimeout: time.Duration(getenvInt("SHUTDOWN_TIMEOUT_SECONDS", 5)) * time.Second,
 		},
 		JWT: JWTConfig{
@@ -125,6 +127,7 @@ func Load() (*Config, error) {
 			ExpiryHours: time.Duration(getenvInt("JWT_EXPIRY_HOURS", 24)) * time.Hour,
 		},
 		Postgres: PostgresConfig{
+			URL:      getenv("DATABASE_URL", ""),
 			Host:     getenv("POSTGRES_HOST", "localhost"),
 			Port:     getenvInt("POSTGRES_PORT", 5432),
 			User:     getenv("POSTGRES_USER", "drone_admin"),
@@ -133,6 +136,7 @@ func Load() (*Config, error) {
 			SSLMode:  getenv("POSTGRES_SSLMODE", "disable"),
 		},
 		Redis: RedisConfig{
+			URL:      getenv("REDIS_URL", ""),
 			Host:     getenv("REDIS_HOST", "localhost"),
 			Port:     getenvInt("REDIS_PORT", 6379),
 			Password: getenv("REDIS_PASSWORD", ""),
@@ -171,6 +175,9 @@ func Load() (*Config, error) {
 }
 
 func (p PostgresConfig) DSN() string {
+	if p.URL != "" {
+		return p.URL
+	}
 	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		p.Host, p.Port, p.User, p.Password, p.DB, p.SSLMode)
 }
