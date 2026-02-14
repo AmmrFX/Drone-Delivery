@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"net/http"
 
 	"drone-delivery/internal/pkg/apperrors"
@@ -10,13 +11,20 @@ import (
 )
 
 type Handler struct {
-	service Service
+	service         Service
+	deliveryManager DeliveryManager
+}
+type DeliveryManager interface {
+	ReserveJobAndAssign(ctx context.Context, jobID, droneID string) (*Job, error)
+	GrabOrder(ctx context.Context, orderID uuid.UUID, droneID string) error
+	CompleteDelivery(ctx context.Context, orderID uuid.UUID, droneID string, success bool) error
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service Service, deliveryManager DeliveryManager) *Handler {
+	return &Handler{service: service, deliveryManager: deliveryManager}
 }
 
+// --------------------------------------------------------------
 func (h *Handler) ListOpenJobs(c *gin.Context) {
 	jobs, err := h.service.ListOpenJobs(c.Request.Context())
 	if err != nil {
@@ -26,6 +34,7 @@ func (h *Handler) ListOpenJobs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"jobs": jobs})
 }
 
+// --------------------------------------------------------------
 func (h *Handler) ReserveJob(c *gin.Context) {
 	var req struct {
 		JobID string `json:"job_id" binding:"required"`
@@ -37,7 +46,7 @@ func (h *Handler) ReserveJob(c *gin.Context) {
 
 	droneID := c.GetString("sub")
 
-	j, err := h.service.ReserveJobAndAssign(c.Request.Context(), req.JobID, droneID)
+	j, err := h.deliveryManager.ReserveJobAndAssign(c.Request.Context(), req.JobID, droneID)
 	if err != nil {
 		apperrors.ToHTTPError(c, err)
 		return
@@ -46,6 +55,7 @@ func (h *Handler) ReserveJob(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"job": j, "message": "job reserved"})
 }
 
+// --------------------------------------------------------------
 func (h *Handler) GrabOrder(c *gin.Context) {
 	orderID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -55,7 +65,7 @@ func (h *Handler) GrabOrder(c *gin.Context) {
 
 	droneID := c.GetString("sub")
 
-	if err := h.service.GrabOrder(c.Request.Context(), orderID, droneID); err != nil {
+	if err := h.deliveryManager.GrabOrder(c.Request.Context(), orderID, droneID); err != nil {
 		apperrors.ToHTTPError(c, err)
 		return
 	}
@@ -63,6 +73,7 @@ func (h *Handler) GrabOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "order picked up"})
 }
 
+// --------------------------------------------------------------
 func (h *Handler) CompleteDelivery(c *gin.Context) {
 	orderID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -84,7 +95,7 @@ func (h *Handler) CompleteDelivery(c *gin.Context) {
 
 	droneID := c.GetString("sub")
 
-	if err := h.service.CompleteDelivery(c.Request.Context(), orderID, droneID, req.Status == "delivered"); err != nil {
+	if err := h.deliveryManager.CompleteDelivery(c.Request.Context(), orderID, droneID, req.Status == "delivered"); err != nil {
 		apperrors.ToHTTPError(c, err)
 		return
 	}

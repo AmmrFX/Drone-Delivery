@@ -4,9 +4,7 @@ import (
 	"context"
 
 	domainerrors "drone-delivery/internal/errors"
-	"drone-delivery/internal/order"
 
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -21,20 +19,15 @@ type Service interface {
 	CancelJobByOrderID(ctx context.Context, orderID string) error
 	ListJobs(ctx context.Context, status *Status, page, limit int) ([]*Job, int, error)
 	CreateJobWithTx(ctx context.Context, tx sqlx.ExtContext, orderID string) error
-	CreateOrderAndJob(ctx context.Context, o *order.Order) error
-	ReserveJobAndAssign(ctx context.Context, jobID, droneID string) (*Job, error)
-	GrabOrder(ctx context.Context, orderID uuid.UUID, droneID string) error
-	CompleteDelivery(ctx context.Context, orderID uuid.UUID, droneID string, delivered bool) error
-	CancelOrderAndJob(ctx context.Context, orderID uuid.UUID, submittedBy string) error
 }
 
 type service struct {
-	repo Repository
 	db   *sqlx.DB
+	repo Repository
 }
 
 func NewService(repo Repository, db *sqlx.DB) Service {
-	return &service{repo: repo, db: db}
+	return &service{db: db, repo: repo}
 }
 
 // --------------------------------------------------------------
@@ -100,10 +93,6 @@ func (s *service) CancelJobByOrderID(ctx context.Context, orderID string) error 
 	return s.repo.CancelByOrderID(ctx, s.db, orderID)
 }
 
-func (s *service) CancelOrderAndJob(ctx context.Context, orderID uuid.UUID, submittedBy string) error {
-	return s.repo.CancelOrderAndJob(ctx, orderID, submittedBy)
-}
-
 // --------------------------------------------------------------
 func (s *service) GetByOrderID(ctx context.Context, orderID string) (*Job, error) {
 	j, err := s.repo.GetByOrderID(ctx, s.db, orderID)
@@ -116,24 +105,4 @@ func (s *service) GetByOrderID(ctx context.Context, orderID string) (*Job, error
 // --------------------------------------------------------------
 func (s *service) ListJobs(ctx context.Context, status *Status, page, limit int) ([]*Job, int, error) {
 	return s.repo.ListAll(ctx, s.db, status, page, limit)
-}
-
-// --------------------------------------------------------------
-func (s *service) CreateOrderAndJob(ctx context.Context, o *order.Order) error {
-	return s.repo.CreateOrderAndJob(ctx, o)
-}
-
-// --------------------------------------------------------------
-func (s *service) ReserveJobAndAssign(ctx context.Context, jobID, droneID string) (*Job, error) {
-	return s.repo.ReserveJobAndAssign(ctx, jobID, droneID)
-}
-
-// --------------------------------------------------------------
-func (s *service) GrabOrder(ctx context.Context, orderID uuid.UUID, droneID string) error {
-	return s.repo.GrabOrder(ctx, orderID, droneID)
-}
-
-// --------------------------------------------------------------
-func (s *service) CompleteDelivery(ctx context.Context, orderID uuid.UUID, droneID string, delivered bool) error {
-	return s.repo.CompleteDelivery(ctx, orderID, droneID, delivered)
 }

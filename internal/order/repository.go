@@ -20,13 +20,13 @@ type Repository interface {
 	Cancel(ctx context.Context, ext sqlx.ExtContext, orderID uuid.UUID, submittedBy string) error
 }
 
-type orderRepository struct{}
+type repo struct{}
 
-func NewOrderRepository() Repository {
-	return &orderRepository{}
+func NewRepository() Repository {
+	return &repo{}
 }
 
-func (r *orderRepository) Create(ctx context.Context, ext sqlx.ExtContext, o *Order) error {
+func (r *repo) Create(ctx context.Context, ext sqlx.ExtContext, o *Order) error {
 	const query = `INSERT INTO orders (id, submitted_by, origin_lat, origin_lng, dest_lat, dest_lng, status, assigned_drone_id, created_at, updated_at)
 		VALUES (:id, :submitted_by, :origin_lat, :origin_lng, :dest_lat, :dest_lng, :status, :assigned_drone_id, :created_at, :updated_at)`
 
@@ -34,7 +34,7 @@ func (r *orderRepository) Create(ctx context.Context, ext sqlx.ExtContext, o *Or
 	return err
 }
 
-func (r *orderRepository) GetByID(ctx context.Context, ext sqlx.ExtContext, id uuid.UUID) (*Order, error) {
+func (r *repo) GetByID(ctx context.Context, ext sqlx.ExtContext, id uuid.UUID) (*Order, error) {
 	var o Order
 	query := fmt.Sprintf(`SELECT %s FROM orders WHERE id = $1`, columns)
 	err := sqlx.GetContext(ctx, ext, &o, query, id)
@@ -44,13 +44,13 @@ func (r *orderRepository) GetByID(ctx context.Context, ext sqlx.ExtContext, id u
 	return &o, nil
 }
 
-func (r *orderRepository) Update(ctx context.Context, ext sqlx.ExtContext, o *Order) error {
+func (r *repo) Update(ctx context.Context, ext sqlx.ExtContext, o *Order) error {
 	const query = `UPDATE orders SET status = :status, assigned_drone_id = :assigned_drone_id, origin_lat = :origin_lat, origin_lng = :origin_lng, dest_lat = :dest_lat, dest_lng = :dest_lng, updated_at = :updated_at WHERE id = :id`
 	_, err := sqlx.NamedExecContext(ctx, ext, query, o)
 	return err
 }
 
-func (r *orderRepository) ListBySubmitter(ctx context.Context, ext sqlx.ExtContext, submittedBy string) ([]*Order, error) {
+func (r *repo) ListBySubmitter(ctx context.Context, ext sqlx.ExtContext, submittedBy string) ([]*Order, error) {
 	var orders []*Order
 	query := fmt.Sprintf(`SELECT %s FROM orders WHERE submitted_by = $1 ORDER BY created_at DESC`, columns)
 	err := sqlx.SelectContext(ctx, ext, &orders, query, submittedBy)
@@ -60,7 +60,7 @@ func (r *orderRepository) ListBySubmitter(ctx context.Context, ext sqlx.ExtConte
 	return orders, nil
 }
 
-func (r *orderRepository) ListAll(ctx context.Context, ext sqlx.ExtContext, status *Status, page, limit int) ([]*Order, int, error) {
+func (r *repo) ListAll(ctx context.Context, ext sqlx.ExtContext, status *Status, page, limit int) ([]*Order, int, error) {
 	offset := (page - 1) * limit
 	args := []any{}
 	argIdx := 1
@@ -91,7 +91,7 @@ func (r *orderRepository) ListAll(ctx context.Context, ext sqlx.ExtContext, stat
 	return orders, total, nil
 }
 
-func (r *orderRepository) Cancel(ctx context.Context, ext sqlx.ExtContext, orderID uuid.UUID, submittedBy string) error {
+func (r *repo) Cancel(ctx context.Context, ext sqlx.ExtContext, orderID uuid.UUID, submittedBy string) error {
 	const query = `UPDATE orders SET status = 'CANCELLED', submitted_by = $2, updated_at = NOW()
 		WHERE id = $1 AND status NOT IN ('COMPLETED', 'CANCELLED')`
 	res, err := ext.ExecContext(ctx, query, orderID, submittedBy)
@@ -108,7 +108,7 @@ func (r *orderRepository) Cancel(ctx context.Context, ext sqlx.ExtContext, order
 	return nil
 }
 
-func (r *orderRepository) GetByDroneID(ctx context.Context, ext sqlx.ExtContext, droneID string) (*Order, error) {
+func (r *repo) GetByDroneID(ctx context.Context, ext sqlx.ExtContext, droneID string) (*Order, error) {
 	var o Order
 	query := fmt.Sprintf(`SELECT %s FROM orders WHERE assigned_drone_id = $1`, columns)
 	err := sqlx.GetContext(ctx, ext, &o, query, droneID)

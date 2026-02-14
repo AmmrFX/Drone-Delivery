@@ -6,6 +6,7 @@ import (
 	"drone-delivery/internal/admin"
 	"drone-delivery/internal/auth"
 	"drone-delivery/internal/common"
+	"drone-delivery/internal/delivery"
 	"drone-delivery/internal/drone"
 	"drone-delivery/internal/job"
 	"drone-delivery/internal/jwt"
@@ -89,9 +90,10 @@ func wireApp(cfg *config.Config) (*AppContext, error) {
 	mapboxClient := common.NewMapboxClient(cfg.Mapbox.BaseURL, cfg.Mapbox.AccessToken)
 
 	// ── Repositories ──
-	orderRepo := order.NewOrderRepository()
-	droneRepo := drone.NewDroneRepository()
-	jobRepo := job.NewJobRepository(db, orderRepo, droneRepo)
+	orderRepo := order.NewRepository()
+	droneRepo := drone.NewRepository()
+	jobRepo := job.NewRepository()
+	deliveryRepo := delivery.NewRepository(orderRepo, jobRepo, droneRepo)
 
 	// ── Services ──
 	orderService := order.NewOrderService(orderRepo, db, order.ZoneConfig{
@@ -105,12 +107,14 @@ func wireApp(cfg *config.Config) (*AppContext, error) {
 	jobService := job.NewService(jobRepo, db)
 	adminService := admin.NewService(orderService, droneService, jobService, db)
 	authService := auth.NewAuthService(jwtService)
+	deliveryService := delivery.NewService(db, deliveryRepo)
 
 	// ── Handlers ──
+
 	authHandler := auth.NewHandler(authService)
-	orderHandler := order.NewHandler(orderService, jobService)
+	orderHandler := order.NewHandler(orderService, deliveryService)
 	droneHandler := drone.NewHandler(droneService, &orderQueryAdapter{svc: orderService}, jobService, db)
-	jobHandler := job.NewHandler(jobService)
+	jobHandler := job.NewHandler(jobService, deliveryService)
 	adminHandler := admin.NewHandler(adminService, orderService, droneService)
 
 	return &AppContext{

@@ -13,24 +13,24 @@ type Repository interface {
 	ListAll(ctx context.Context, ext sqlx.ExtContext, status *Status, page, limit int) ([]*Drone, int, error)
 }
 
-type droneRepository struct{}
+type repo struct{}
 
-func NewDroneRepository() Repository {
-	return &droneRepository{}
+func NewRepository() Repository {
+	return &repo{}
 }
 
-func (r *droneRepository) Upsert(ctx context.Context, ext sqlx.ExtContext, d *Drone) error {
+func (r *repo) Upsert(ctx context.Context, ext sqlx.ExtContext, d *Drone) error {
 	return nil
 }
 
-func (r *droneRepository) GetByID(ctx context.Context, ext sqlx.ExtContext, id string) (*Drone, error) {
+func (r *repo) GetByID(ctx context.Context, ext sqlx.ExtContext, id string) (*Drone, error) {
 	return nil, nil
 }
 
-func (r *droneRepository) Update(ctx context.Context, ext sqlx.ExtContext, d *Drone) error {
+func (r *repo) Update(ctx context.Context, ext sqlx.ExtContext, d *Drone) error {
 	return nil
 }
 
-func (r *droneRepository) ListAll(ctx context.Context, ext sqlx.ExtContext, status *Status, page, limit int) ([]*Drone, int, error) {
+func (r *repo) ListAll(ctx context.Context, ext sqlx.ExtContext, status *Status, page, limit int) ([]*Drone, int, error) {
 	return nil, 0, nil
 }

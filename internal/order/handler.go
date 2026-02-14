@@ -10,19 +10,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// JobManager is a local interface to avoid importing the job package (circular dep).
-type JobManager interface {
+// DeliveryManager avoids importing the delivery package (circular dep prevention).
+type DeliveryManager interface {
 	CreateOrderAndJob(ctx context.Context, o *Order) error
 	CancelOrderAndJob(ctx context.Context, orderID uuid.UUID, submittedBy string) error
 }
 
 type Handler struct {
-	service    Service
-	jobService JobManager
+	service         Service
+	deliveryService DeliveryManager
 }
 
-func NewHandler(service Service, jobService JobManager) *Handler {
-	return &Handler{service: service, jobService: jobService}
+func NewHandler(service Service, deliveryService DeliveryManager) *Handler {
+	return &Handler{service: service, deliveryService: deliveryService}
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -36,7 +36,7 @@ func (h *Handler) PlaceOrder(c *gin.Context) {
 	sub := c.GetString("sub")
 	o := NewOrder(sub, req.Origin, req.Destination)
 
-	if err := h.jobService.CreateOrderAndJob(c.Request.Context(),o); err != nil {
+	if err := h.deliveryService.CreateOrderAndJob(c.Request.Context(), o); err != nil {
 		apperrors.ToHTTPError(c, err)
 		return
 	}
@@ -53,7 +53,7 @@ func (h *Handler) WithdrawOrder(c *gin.Context) {
 
 	sub := c.GetString("sub")
 
-	if err := h.jobService.CancelOrderAndJob(c.Request.Context(), id, sub); err != nil {
+	if err := h.deliveryService.CancelOrderAndJob(c.Request.Context(), id, sub); err != nil {
 		apperrors.ToHTTPError(c, err)
 		return
 	}
