@@ -4,6 +4,7 @@ import (
 	"context"
 	"drone-delivery/config"
 	"drone-delivery/internal/admin"
+	pgmigrate "drone-delivery/internal/repo/postgres"
 	"drone-delivery/internal/auth"
 	"drone-delivery/internal/common"
 	"drone-delivery/internal/delivery"
@@ -65,6 +66,10 @@ func wireApp(cfg *config.Config) (*AppContext, error) {
 	db, err := sqlx.Connect("postgres", cfg.Postgres.DSN())
 	if err != nil {
 		return nil, fmt.Errorf("postgres: %w", err)
+	}
+
+	if err := pgmigrate.RunMigrationsUp(db); err != nil {
+		return nil, fmt.Errorf("migrations: %w", err)
 	}
 
 	// ── Redis ──

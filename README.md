@@ -2,7 +2,8 @@
 
 A production-ready backend service for managing autonomous drone delivery operations. Built with Go, it orchestrates the full lifecycle of delivery orders — from placement through drone assignment, pickup, and completion — with built-in resilience patterns, geofencing, and role-based access control.
 
-**Live API:** `<RENDER_URL>`
+**Live API:** https://drone-delivery-3q0y.onrender.com
+**Local API:** http://localhost:8080
 
 ## Table of Contents
 
@@ -173,15 +174,19 @@ The API will be available at `http://localhost:8080`.
 ### Quick smoke test
 
 ```bash
+# Use the live API or local
+BASE=https://drone-delivery-3q0y.onrender.com
+# BASE=http://localhost:8080
+
 # Health check
-curl http://localhost:8080/health
+curl $BASE/health
 
 # Get a token
-curl -X POST http://localhost:8080/auth/token \
+curl -X POST $BASE/auth/token \
   -d "name=alice&role=enduser"
 
 # Place an order (Riyadh coordinates)
-curl -X POST http://localhost:8080/orders \
+curl -X POST $BASE/orders \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"origin":{"lat":24.7136,"lng":46.6753},"destination":{"lat":24.80,"lng":46.70}}'
