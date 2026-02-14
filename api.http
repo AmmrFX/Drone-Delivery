@@ -2,7 +2,7 @@
 ### Drone Delivery API — REST Client (.http)
 ### ─────────────────────────────────────────────────
 
-@base = http://localhost:8080
+@base = https://drone-delivery-3q0y.onrender.com
 
 ### ═══════════════════════════════════════════════════
 ### Health
@@ -42,9 +42,9 @@ name=admin1&role=admin
 
 ###
 
-@enduserToken = {{loginEnduser.response.body.token}}
+@enduserToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsInJvbGUiOiJlbmR1c2VyIiwiZXhwIjoxNzcxMTYyMTg1LCJpYXQiOjE3NzEwNzU3ODV9.EOrnJQ8RHOy4_c46c6yusDhkBdClWNp_43pV-jL6B34
 @droneToken   = {{loginDrone.response.body.token}}
-@adminToken   = {{loginAdmin.response.body.token}}
+@adminToken   = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbjEiLCJyb2xlIjoiYWRtaW4iLCJleHAiOjE3NzExNjIyMTgsImlhdCI6MTc3MTA3NTgxOH0.uHlh6TBFXUMtTGzo6dF3K8u5VmOHzyrRvI_2IKseuxg
 
 ### ═══════════════════════════════════════════════════
 ### Enduser — Orders
@@ -70,6 +70,12 @@ Authorization: Bearer {{enduserToken}}
 ###
 
 @orderId = {{placeOrder.response.body.order.id}}
+
+### List my orders
+GET {{base}}/orders
+Authorization: Bearer {{enduserToken}}
+
+###
 
 ### Get order details
 GET {{base}}/orders/{{orderId}}
